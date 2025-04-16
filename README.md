@@ -14,7 +14,7 @@ L'application est développée avec React Native + Expo et utilise Supabase pour
 ## 🔧 Instructions de Développement
 
 1. **Cloner le projet** :
-   ```bash
+```bash
    git clone 
    https://github.com/votre-repository/planify.git
    cd planify

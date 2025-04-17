@@ -14,18 +14,23 @@ export default function SignInScreen() {
 
 	const handleSignUp = async () => {
 		setLoading(true);
-		const { error} = await supabase.auth.signUp({
-			email,
-			password,
+		const { data, error } = await supabase.auth.signUp({
+		  email,
+		  password,
 		});
-		// if (data)
-		// 	Alert.alert(
-		// 		'Success',
-		// 		'Veuillez vérifier votre email pour confirmer votre inscription.'
-		// 	);
-		if (error) Alert.alert('Error', error.message);
+	  
+		if (error) {
+		  console.log('Sign up error:', error);
+		  Alert.alert('Error', error.message);  
+		} else {
+		  console.log('Sign up success:', data);  
+		  Alert.alert(
+			'Success',
+			'You are successfully signed up!',
+		  );
+		}
 		setLoading(false);
-	};
+	  };
 
 	return (
 		<View style={styles.container}>

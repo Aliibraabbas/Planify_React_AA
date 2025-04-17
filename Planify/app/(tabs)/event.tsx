@@ -10,95 +10,112 @@ import {
   Modal,
   Alert,
   Share,
+  ScrollView,
 } from 'react-native';
 
 interface Event {
   id: string;
-  name: string;
-  date: string;
+  title: string;
+  description?: string;
+  options: string[]; // propositions de dates
   votes: {
-    yes: number;
-    no: number;
+    [option: string]: number;
   };
 }
 
 export default function CreateEventScreen() {
-  const [eventName, setEventName] = useState('');
-  const [eventDate, setEventDate] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
+  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [dateOptions, setDateOptions] = useState<string[]>(['', '']); // commence avec 2 dates obligatoires
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
-  // Fonction pour générer un ID unique simple
   const generateEventId = () => {
     return `event-${Math.random().toString(36).substr(2, 9)}`;
   };
 
   const addEvent = () => {
-    const name = eventName.trim();
-    const date = eventDate.trim();
+    const cleanOptions = dateOptions.filter(opt => opt.trim() !== '');
 
-    if (!name || !date) {
-      Alert.alert('Infos manquantes', 'Merci de remplir le nom et la date de l’événement.');
+    if (!title.trim() || cleanOptions.length < 2) {
+      Alert.alert('Erreur', 'Merci de remplir un titre et au moins 2 dates.');
+      return;
+    }
+
+    if (cleanOptions.length > 5) {
+      Alert.alert('Erreur', 'Vous pouvez proposer maximum 5 dates.');
       return;
     }
 
     const newEvent: Event = {
-      id: generateEventId(),  // Utilisation de la méthode simple pour générer un ID unique
-      name,
-      date,
-      votes: {
-        yes: 0,
-        no: 0,
-      },
+      id: generateEventId(),
+      title: title.trim(),
+      description: description.trim(),
+      options: cleanOptions,
+      votes: cleanOptions.reduce((acc, option) => ({ ...acc, [option]: 0 }), {}),
     };
 
     setEvents(prev => [...prev, newEvent]);
-    setEventName('');
-    setEventDate('');
+    setTitle('');
+    setDescription('');
+    setDateOptions(['', '']);
+    setIsCreateModalVisible(false);
   };
 
   const deleteEvent = (id: string) => {
     setEvents(prev => prev.filter(event => event.id !== id));
   };
 
-  const vote = (type: 'yes' | 'no') => {
-    if (!selectedEvent) return;
-
+  const vote = (eventId: string, option: string) => {
     setEvents(prev =>
       prev.map(ev =>
-        ev.id === selectedEvent.id
+        ev.id === eventId
           ? {
               ...ev,
               votes: {
                 ...ev.votes,
-                [type]: ev.votes[type] + 1,
+                [option]: ev.votes[option] + 1,
               },
             }
           : ev
       )
     );
-
     setSelectedEvent(null);
   };
 
-  // Fonction pour partager un événement
   const shareEvent = async (event: Event) => {
     try {
-      const result = await Share.share({
-        message: `Événement: ${event.name}\nDate: ${event.date}\nParticipez à l'événement en votant pour la date !`,
+      await Share.share({
+        message: `Événement : ${event.title}\n${event.description || ''}\nParticipez et votez !`,
       });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          console.log('Partagé via :', result.activityType);
-        } else {
-          console.log('Événement partagé avec succès');
-        }
-      } else if (result.action === Share.dismissedAction) {
-        console.log('Partage annulé');
-      }
     } catch (error) {
-      console.error('Erreur lors du partage:', error);
+      console.error('Erreur partage :', error);
+    }
+  };
+
+  const updateDateOption = (index: number, value: string) => {
+    const newOptions = [...dateOptions];
+    newOptions[index] = value;
+    setDateOptions(newOptions);
+  };
+
+  const addDateOption = () => {
+    if (dateOptions.length < 5) {
+      setDateOptions(prev => [...prev, '']);
+    } else {
+      Alert.alert('Limite atteinte', 'Vous pouvez proposer jusqu’à 5 dates maximum.');
+    }
+  };
+
+  const removeDateOption = (index: number) => {
+    if (dateOptions.length > 2) {
+      const newOptions = [...dateOptions];
+      newOptions.splice(index, 1);
+      setDateOptions(newOptions);
+    } else {
+      Alert.alert('Minimum requis', 'Vous devez proposer au moins 2 dates.');
     }
   };
 
@@ -106,19 +123,9 @@ export default function CreateEventScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Créer un événement 🎉</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nom de l’événement"
-        value={eventName}
-        onChangeText={setEventName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Date (ex: 20/04/2025)"
-        value={eventDate}
-        onChangeText={setEventDate}
-      />
-      <Button title="Ajouter" onPress={addEvent} />
+      <TouchableOpacity style={styles.createButton} onPress={() => setIsCreateModalVisible(true)}>
+        <Text style={styles.createButtonText}>➕ Créer un événement</Text>
+      </TouchableOpacity>
 
       <Text style={styles.subtitle}>📌 Événements proposés :</Text>
 
@@ -129,51 +136,90 @@ export default function CreateEventScreen() {
           data={events}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <View style={styles.eventCard}>
-              <TouchableOpacity style={{ flex: 1 }} onPress={() => setSelectedEvent(item)}>
-                <Text style={styles.eventName}>{item.name}</Text>
-                <Text style={styles.eventDate}>📅 {item.date}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => deleteEvent(item.id)}>
-                <Text style={styles.deleteText}>🗑️</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.eventCard} onPress={() => setSelectedEvent(item)}>
+              <Text style={styles.eventTitle}>{item.title}</Text>
+              {item.description ? <Text style={styles.eventDescription}>{item.description}</Text> : null}
+            </TouchableOpacity>
           )}
         />
       )}
 
-      {/* Modal de vote */}
-      <Modal visible={selectedEvent !== null} animationType="slide" transparent>
+      {/* Modal création d'événement */}
+      <Modal visible={isCreateModalVisible} animationType="slide" transparent>
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🗳️ Vote pour : {selectedEvent?.name}</Text>
-            <Text style={styles.modalDate}>📅 {selectedEvent?.date}</Text>
+            <ScrollView>
+              <Text style={styles.modalTitle}>🎉 Nouveau Événement</Text>
 
-            <View style={styles.voteButtons}>
-              <TouchableOpacity
-                style={[styles.voteButton, { backgroundColor: '#b6e3b6' }]}
-                onPress={() => vote('yes')}
-              >
-                <Text>✅ Oui ({selectedEvent?.votes.yes})</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Titre de l’événement"
+                value={title}
+                onChangeText={setTitle}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Description (facultatif)"
+                value={description}
+                onChangeText={setDescription}
+              />
+
+              <Text style={styles.label}>Proposez 2 à 5 dates :</Text>
+              {dateOptions.map((option, index) => (
+                <View key={index} style={styles.dateOptionRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder={`Date/Heure ${index + 1}`}
+                    value={option}
+                    onChangeText={value => updateDateOption(index, value)}
+                  />
+                  <TouchableOpacity onPress={() => removeDateOption(index)}>
+                    <Text style={styles.removeText}>🗑️</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.addDateButton} onPress={addDateOption}>
+                <Text style={styles.addDateButtonText}>➕ Ajouter une date</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.voteButton, { backgroundColor: '#f5b6b6' }]}
-                onPress={() => vote('no')}
-              >
-                <Text>❌ Non ({selectedEvent?.votes.no})</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Ajouter le bouton de partage */}
-            <TouchableOpacity
-              style={styles.shareButton}
-              onPress={() => selectedEvent && shareEvent(selectedEvent)}
-            >
-              <Text style={styles.shareText}>🔗 Partager l'événement</Text>
-            </TouchableOpacity>
-
-            <Button title="Fermer" onPress={() => setSelectedEvent(null)} />
+              <Button title="Créer l'événement" onPress={addEvent} />
+              <Button title="Annuler" color="red" onPress={() => setIsCreateModalVisible(false)} />
+            </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      {/* Modal voter sur un événement */}
+      <Modal visible={selectedEvent !== null} animationType="slide" transparent>
+        <View style={styles.modalContainer}>
+          {selectedEvent && (
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>🗳️ Voter pour : {selectedEvent.title}</Text>
+              {selectedEvent.description && <Text style={styles.eventDescription}>{selectedEvent.description}</Text>}
+
+              {selectedEvent.options.map((option, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.voteButton}
+                  onPress={() => vote(selectedEvent.id, option)}
+                >
+                  <Text>
+                    {option} ({selectedEvent.votes[option]} votes)
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => selectedEvent && shareEvent(selectedEvent)}
+              >
+                <Text style={styles.shareText}>🔗 Partager</Text>
+              </TouchableOpacity>
+
+              <Button title="Fermer" onPress={() => setSelectedEvent(null)} />
+            </View>
+          )}
         </View>
       </Modal>
     </View>
@@ -184,24 +230,30 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#f2f2f2',
     flex: 1,
+    backgroundColor: '#f2f2f2',
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 20,
   },
+  createButton: {
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  createButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   subtitle: {
     fontSize: 18,
     fontWeight: '600',
     marginTop: 30,
-    marginBottom: 10,
-  },
-  input: {
-    backgroundColor: 'white',
-    padding: 10,
-    borderRadius: 8,
     marginBottom: 10,
   },
   empty: {
@@ -214,55 +266,73 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
   },
-  eventName: {
+  eventTitle: {
     fontSize: 16,
     fontWeight: '600',
   },
-  eventDate: {
+  eventDescription: {
     fontSize: 14,
     color: '#555',
     marginTop: 4,
   },
-  deleteText: {
-    fontSize: 18,
-    color: '#cc0000',
-    paddingLeft: 10,
-  },
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    padding: 20,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
+    maxHeight: '90%', // prend presque toute la page
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 10,
   },
-  modalDate: {
+  input: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  label: {
     fontSize: 16,
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  dateOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  removeText: {
+    fontSize: 20,
+    color: 'red',
+    marginLeft: 10,
+  },
+  addDateButton: {
+    backgroundColor: '#4CAF50',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
     marginBottom: 20,
   },
-  voteButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
+  addDateButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   voteButton: {
+    backgroundColor: '#eee',
     padding: 12,
     borderRadius: 8,
-    width: '40%',
+    marginBottom: 10,
     alignItems: 'center',
   },
   shareButton: {
